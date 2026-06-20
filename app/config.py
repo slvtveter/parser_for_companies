@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     overpass_query_timeout: int = 120
     request_timeout: int = 45
 
+    # Время жизни кэша результатов поиска (в секундах).
+    cache_ttl: int = 600
+
     # --- OpenRouter (генерация писем нейросетью) ---
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1/chat/completions"

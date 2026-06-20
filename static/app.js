@@ -1,12 +1,16 @@
-// Global state
-let leads = [];
-let filteredLeads = [];
-let selectedLead = null;
-let map = null;
-let markersGroup = null;
-let activeFilter = 'all';
+// ============================================================
+// LeadAnalytics — frontend logic
+// ============================================================
 
-// City coordinates mapping for centering map
+const state = {
+    leads: [],
+    filtered: [],
+    selected: null,
+    filter: "all",
+    map: null,
+    markers: null,
+};
+
 const CITY_COORDS = {
     "Москва": [55.7558, 37.6173],
     "Санкт-Петербург": [59.9343, 30.3351],
@@ -16,763 +20,553 @@ const CITY_COORDS = {
     "Нижний Новгород": [56.3269, 44.0059],
     "Краснодар": [45.0355, 38.9753],
     "Сочи": [43.6028, 39.7342],
-    "Владивосток": [43.1198, 131.8869]
+    "Владивосток": [43.1198, 131.8869],
 };
 
-// Document Ready
-document.addEventListener("DOMContentLoaded", () => {
-    initApp();
-});
+const CATEGORY_ICONS = {
+    cafe: "fa-mug-hot",
+    bakery: "fa-bread-slice",
+    confectionery: "fa-cake-candles",
+    restaurant: "fa-utensils",
+    fast_food: "fa-burger",
+    beauty: "fa-scissors",
+    florist: "fa-seedling",
+};
 
-async function initApp() {
+const COLOR_TO_TAG = { success: "success", warning: "warning", danger: "danger", primary: "brand" };
+const SCORE_HEX = { HIGH: "#34d399", MEDIUM: "#a78bfa", LOW: "#f87171" };
+
+const $ = (sel) => document.querySelector(sel);
+
+document.addEventListener("DOMContentLoaded", init);
+
+async function init() {
     initMap();
-    await loadCities();
-    await loadCategories();
-    setupEventListeners();
+    setupListeners();
+    await Promise.all([loadCities(), loadCategories()]);
 }
 
-// Initialize Leaflet Map
+// ---------------- Map ----------------
 function initMap() {
-    // Center at Moscow initially
-    map = L.map('map').setView(CITY_COORDS["Москва"], 11);
-    
-    // CartoDB Dark Matter layer for sleek dark theme
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20
-    }).addTo(map);
-    
-    markersGroup = L.layerGroup().addTo(map);
+    state.map = L.map("map", { zoomControl: true, attributionControl: false }).setView(CITY_COORDS["Москва"], 11);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        subdomains: "abcd",
+        maxZoom: 20,
+    }).addTo(state.map);
+    state.markers = L.layerGroup().addTo(state.map);
 }
 
-// Load cities list from API
+// ---------------- Data loading ----------------
 async function loadCities() {
     try {
-        const res = await fetch("/api/cities");
-        const cities = await res.json();
-        
-        const select = document.getElementById("city-select");
+        const cities = await (await fetch("/api/cities")).json();
+        const select = $("#city-select");
         select.innerHTML = "";
-        
-        cities.forEach(city => {
-            const option = document.createElement("option");
-            option.value = city.name;
-            option.textContent = city.name;
-            if (city.name === "Москва") option.selected = true;
-            select.appendChild(option);
+        cities.forEach((c) => {
+            const opt = document.createElement("option");
+            opt.value = c.name;
+            opt.textContent = c.name;
+            if (c.name === "Москва") opt.selected = true;
+            select.appendChild(opt);
         });
-    } catch (err) {
-        console.error("Error loading cities:", err);
+    } catch {
+        toast("error", "Не удалось загрузить список городов");
     }
 }
 
-// Load categories list from API
 async function loadCategories() {
     try {
-        const res = await fetch("/api/categories");
-        const categories = await res.json();
-        
-        const listContainer = document.getElementById("categories-list");
-        listContainer.innerHTML = "";
-        
-        categories.forEach(cat => {
-            const div = document.createElement("div");
-            div.className = "checkbox-item";
-            
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = cat.id;
-            checkbox.id = `cat-${cat.id}`;
-            // Pre-select Cafe and Bakery as defaults
-            if (cat.id === "cafe" || cat.id === "bakery") checkbox.checked = true;
-            
-            const label = document.createElement("label");
-            label.htmlFor = `cat-${cat.id}`;
-            label.textContent = cat.name;
-            
-            div.appendChild(checkbox);
-            div.appendChild(label);
-            listContainer.appendChild(div);
+        const cats = await (await fetch("/api/categories")).json();
+        const box = $("#categories-list");
+        box.innerHTML = "";
+        cats.forEach((cat) => {
+            const pressed = cat.id === "cafe" || cat.id === "bakery";
+            const btn = document.createElement("button");
+            btn.className = "chip";
+            btn.dataset.id = cat.id;
+            btn.setAttribute("aria-pressed", String(pressed));
+            const icon = CATEGORY_ICONS[cat.id] || "fa-store";
+            btn.innerHTML = `<i class="fa-solid ${icon}"></i> ${cat.name}`;
+            btn.addEventListener("click", () => {
+                const now = btn.getAttribute("aria-pressed") === "true";
+                btn.setAttribute("aria-pressed", String(!now));
+            });
+            box.appendChild(btn);
         });
-    } catch (err) {
-        console.error("Error loading categories:", err);
+    } catch {
+        toast("error", "Не удалось загрузить категории");
     }
 }
 
-// Set up event listeners
-function setupEventListeners() {
-    const searchBtn = document.getElementById("search-btn");
-    const citySelect = document.getElementById("city-select");
-    const searchInput = document.getElementById("table-search");
-    const filterButtons = document.querySelectorAll(".badge-btn");
-    
-    const exportExcelBtn = document.getElementById("export-excel-btn");
-    const exportCsvBtn = document.getElementById("export-csv-btn");
-
-    // City Selection - fly to coordinates
-    citySelect.addEventListener("change", (e) => {
-        const city = e.target.value;
-        if (CITY_COORDS[city]) {
-            map.flyTo(CITY_COORDS[city], 11);
-        }
+// ---------------- Listeners ----------------
+function setupListeners() {
+    $("#search-btn").addEventListener("click", runSearch);
+    $("#city-select").addEventListener("change", (e) => {
+        const c = CITY_COORDS[e.target.value];
+        if (c) state.map.flyTo(c, 11);
     });
-
-    // Search Trigger
-    searchBtn.addEventListener("click", runSearch);
-
-    // Text search in table
-    searchInput.addEventListener("input", filterLeads);
-
-    // Filter badge buttons
-    filterButtons.forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            filterButtons.forEach(b => b.classList.remove("active"));
-            e.target.classList.add("active");
-            activeFilter = e.target.dataset.filter;
-            filterLeads();
+    $("#table-search").addEventListener("input", applyFilters);
+    document.querySelectorAll(".filter-chip").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".filter-chip").forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.filter = btn.dataset.filter;
+            applyFilters();
         });
     });
-
-    // Exports
-    exportExcelBtn.addEventListener("click", () => exportData("xlsx"));
-    exportCsvBtn.addEventListener("click", () => exportData("csv"));
+    $("#export-excel-btn").addEventListener("click", () => exportData("xlsx"));
+    $("#export-csv-btn").addEventListener("click", () => exportData("csv"));
 }
 
-// Main search execution
+// ---------------- Search ----------------
 async function runSearch() {
-    const city = document.getElementById("city-select").value;
-    const checkedBoxes = document.querySelectorAll("#categories-list input:checked");
-    
-    if (checkedBoxes.length === 0) {
-        alert("Пожалуйста, выберите хотя бы одну сферу бизнеса.");
+    const city = $("#city-select").value;
+    const selected = [...document.querySelectorAll('.chip[aria-pressed="true"]')].map((c) => c.dataset.id);
+    if (selected.length === 0) {
+        toast("error", "Выберите хотя бы одну сферу бизнеса");
         return;
     }
-    
-    const categories = Array.from(checkedBoxes).map(cb => cb.value);
-    
-    // Show Loader
-    const overlay = document.getElementById("loader-overlay");
-    const statusTxt = document.getElementById("loader-status");
-    overlay.classList.remove("hidden");
-    statusTxt.textContent = "Формирование запроса и отправка в Overpass API...";
-    
+
+    showLoader("Отправляем запрос в OpenStreetMap…");
+    renderSkeleton();
+
     try {
-        statusTxt.textContent = "Идет сбор заведений от OpenStreetMap (обычно 5-20 сек)...";
+        setLoaderText("Собираем заведения (обычно 5–20 секунд)…");
         const res = await fetch("/api/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ city, categories })
+            body: JSON.stringify({ city, categories: selected }),
         });
-        
         if (!res.ok) throw new Error(await res.text());
-        
-        statusTxt.textContent = "Обработка и оценка потенциала лидов...";
+
+        setLoaderText("Оцениваем потенциал лидов…");
         const data = await res.json();
-        
-        leads = data.leads;
-        filteredLeads = [...leads];
-        
-        // Render stats & UI
+
+        state.leads = data.leads;
+        state.filtered = [...data.leads];
+        state.selected = null;
+
         updateStats();
-        renderLeadsTable();
-        renderMapMarkers();
-        
-        // Center map on the city and zoom to contain data
-        if (CITY_COORDS[city]) {
-            map.setView(CITY_COORDS[city], 12);
+        renderTable();
+        renderMarkers();
+        resetDetail();
+
+        if (CITY_COORDS[city]) state.map.setView(CITY_COORDS[city], 12);
+
+        const hasLeads = data.leads.length > 0;
+        $("#export-excel-btn").disabled = !hasLeads;
+        $("#export-csv-btn").disabled = !hasLeads;
+
+        $("#result-summary").textContent = hasLeads
+            ? `Найдено ${data.total} заведений в городе ${city}`
+            : `В городе ${city} ничего не найдено по выбранным сферам`;
+        $("#cached-badge").hidden = !data.cached;
+
+        hideLoader();
+        if (hasLeads) {
+            toast("success", data.cached ? "Загружено из кэша" : `Готово: ${data.total} заведений`);
+        } else {
+            toast("info", "Ничего не найдено — попробуйте другие сферы или город");
         }
-        
-        // Enable exports
-        document.getElementById("export-excel-btn").disabled = leads.length === 0;
-        document.getElementById("export-csv-btn").disabled = leads.length === 0;
-        
-        // Close Loader
-        overlay.classList.add("hidden");
-        
     } catch (err) {
-        console.error("Search error:", err);
-        alert(`Ошибка при сборе данных: ${err.message || err}`);
-        overlay.classList.add("hidden");
+        hideLoader();
+        renderTableEmpty("Не удалось собрать данные. Попробуйте ещё раз.");
+        toast("error", `Ошибка: ${shortErr(err)}`);
     }
 }
 
-// Update stats cards
+// ---------------- Stats ----------------
 function updateStats() {
-    const total = leads.length;
-    const high = leads.filter(l => l.potential_score === "HIGH").length;
-    const medium = leads.filter(l => l.potential_score === "MEDIUM").length;
-    const low = leads.filter(l => l.potential_score === "LOW").length;
-
-    document.querySelector("#stat-total h3").textContent = total;
-    document.querySelector("#stat-high h3").textContent = high;
-    document.querySelector("#stat-medium h3").textContent = medium;
-    document.querySelector("#stat-low h3").textContent = low;
-    
-    document.getElementById("map-counter").textContent = `${total} отметок`;
+    const by = (s) => state.leads.filter((l) => l.potential_score === s).length;
+    animateCounter($("#stat-total"), state.leads.length);
+    animateCounter($("#stat-high"), by("HIGH"));
+    animateCounter($("#stat-medium"), by("MEDIUM"));
+    animateCounter($("#stat-low"), by("LOW"));
+    $("#map-counter").textContent = `${state.leads.length} отметок`;
 }
 
-// Filter leads logic
-function filterLeads() {
-    const searchText = document.getElementById("table-search").value.toLowerCase();
-    
-    filteredLeads = leads.filter(lead => {
-        // Text Match
-        const nameMatch = lead.name.toLowerCase().includes(searchText);
-        const addressMatch = lead.address.toLowerCase().includes(searchText);
-        const brandMatch = lead.brand && lead.brand.toLowerCase().includes(searchText);
-        const textMatch = nameMatch || addressMatch || brandMatch;
-        
-        if (!textMatch) return false;
-        
-        // Badge Filter Match
-        if (activeFilter === 'all') return true;
-        if (activeFilter === 'HIGH') return lead.potential_score === 'HIGH';
-        if (activeFilter === 'contacts') return lead.website || lead.phone;
-        if (activeFilter === 'independent') return !lead.is_chain;
-        
+function animateCounter(el, to) {
+    const from = parseInt(el.textContent.replace(/\D/g, ""), 10) || 0;
+    if (from === to) { el.textContent = to; return; }
+    const dur = 700, start = performance.now();
+    const step = (now) => {
+        const p = Math.min((now - start) / dur, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(from + (to - from) * eased);
+        if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+}
+
+// ---------------- Filters ----------------
+function applyFilters() {
+    const q = $("#table-search").value.toLowerCase();
+    state.filtered = state.leads.filter((l) => {
+        const text = `${l.name} ${l.address} ${l.brand || ""}`.toLowerCase();
+        if (q && !text.includes(q)) return false;
+        if (state.filter === "HIGH") return l.potential_score === "HIGH";
+        if (state.filter === "contacts") return l.website || l.phone;
+        if (state.filter === "independent") return !l.is_chain;
         return true;
     });
-
-    renderLeadsTable();
-    renderMapMarkers();
+    renderTable();
+    renderMarkers();
 }
 
-// Render leads into table
-function renderLeadsTable() {
-    const tbody = document.getElementById("leads-table-body");
-    tbody.innerHTML = "";
-    
-    if (filteredLeads.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center">Организаций не найдено по выбранным фильтрам.</td></tr>`;
+// ---------------- Table ----------------
+function renderSkeleton() {
+    const tb = $("#leads-table-body");
+    tb.innerHTML = "";
+    for (let i = 0; i < 6; i++) {
+        const tr = document.createElement("tr");
+        tr.className = "sk-row";
+        tr.innerHTML = `
+            <td><div class="sk w-lg"></div></td>
+            <td><div class="sk w-md"></div></td>
+            <td><div class="sk w-lg"></div></td>
+            <td><div class="sk w-sm"></div></td>
+            <td><div class="sk w-sm"></div></td>
+            <td><div class="sk w-sm"></div></td>`;
+        tb.appendChild(tr);
+    }
+}
+
+function renderTableEmpty(msg) {
+    $("#leads-table-body").innerHTML = `<tr><td colspan="6" class="table-empty">${msg}</td></tr>`;
+}
+
+function renderTable() {
+    const tb = $("#leads-table-body");
+    if (state.filtered.length === 0) {
+        renderTableEmpty("Организаций не найдено по выбранным фильтрам.");
         return;
     }
-    
-    filteredLeads.forEach(lead => {
+    tb.innerHTML = "";
+    state.filtered.forEach((lead) => {
         const tr = document.createElement("tr");
-        if (selectedLead && selectedLead.id === lead.id) tr.className = "selected";
-        
-        // Contacts icon indicators
-        let contactIcons = "";
-        if (lead.phone) contactIcons += `<i class="fa-solid fa-phone active" title="${lead.phone}"></i>`;
-        else contactIcons += `<i class="fa-solid fa-phone" title="Нет телефона"></i>`;
-        
-        if (lead.website) contactIcons += `<i class="fa-solid fa-globe active" title="${lead.website}"></i>`;
-        else contactIcons += `<i class="fa-solid fa-globe" title="Нет сайта/соцсети"></i>`;
-        
-        // Potential score styling
-        const scoreBadge = `<span class="tag tag-${lead.potential_color}">${lead.potential_score}</span>`;
-        
+        if (state.selected && state.selected.id === lead.id) tr.classList.add("selected");
+
+        const phoneOn = lead.phone ? "on" : "";
+        const webOn = lead.website ? "on" : "";
+        const tag = COLOR_TO_TAG[lead.potential_color] || "muted";
+
         tr.innerHTML = `
-            <td><strong>${lead.name}</strong></td>
-            <td>${lead.category_label}</td>
-            <td>${lead.address}</td>
-            <td><div class="contact-icons">${contactIcons}</div></td>
-            <td>${scoreBadge}</td>
-            <td>${lead.brand ? `<span class="tag tag-warning">${lead.brand}</span>` : '<span class="text-muted">—</span>'}</td>
-        `;
-        
-        tr.addEventListener("click", () => {
-            selectLead(lead);
-            // Highlight row
-            document.querySelectorAll("#leads-table-body tr").forEach(r => r.classList.remove("selected"));
-            tr.classList.add("selected");
-        });
-        
-        tbody.appendChild(tr);
+            <td><span class="name">${esc(lead.name)}</span></td>
+            <td>${esc(lead.category_label)}</td>
+            <td>${esc(lead.address)}</td>
+            <td><div class="contacts">
+                <i class="fa-solid fa-phone ${phoneOn}" title="${lead.phone ? esc(lead.phone) : "Нет телефона"}"></i>
+                <i class="fa-solid fa-globe ${webOn}" title="${lead.website ? esc(lead.website) : "Нет сайта"}"></i>
+            </div></td>
+            <td><span class="tag tag-${tag}">${lead.potential_score}</span></td>
+            <td>${lead.brand ? `<span class="tag tag-warning">${esc(lead.brand)}</span>` : '<span class="text-muted">—</span>'}</td>`;
+
+        tr.addEventListener("click", () => selectLead(lead));
+        tb.appendChild(tr);
     });
 }
 
-// Render Leaflet Map Markers
-function renderMapMarkers() {
-    markersGroup.clearLayers();
-    
-    filteredLeads.forEach(lead => {
-        // Determine marker color based on potential
-        let color = '#3b82f6'; // blue default
-        if (lead.potential_score === 'HIGH') color = '#10b981'; // green
-        else if (lead.potential_score === 'MEDIUM') color = '#a78bfa'; // purple
-        else if (lead.potential_score === 'LOW') color = '#ef4444'; // red
-        if (lead.is_chain) color = '#f59e0b'; // orange for chains
+// ---------------- Map markers ----------------
+function renderMarkers() {
+    state.markers.clearLayers();
+    state.filtered.forEach((lead) => {
+        let color = SCORE_HEX[lead.potential_score] || "#818cf8";
+        if (lead.is_chain) color = "#fbbf24";
+        const pulse = lead.potential_score === "HIGH" && !lead.is_chain ? "pulse" : "";
 
-        const markerHtml = `
-            <div style="
-                background-color: ${color}; 
-                width: 14px; 
-                height: 14px; 
-                border-radius: 50%; 
-                border: 2px solid #ffffff; 
-                box-shadow: 0 0 8px rgba(0,0,0,0.5);
-            "></div>
-        `;
-        
-        const customIcon = L.divIcon({
-            html: markerHtml,
-            className: 'custom-div-icon',
+        const icon = L.divIcon({
+            className: "",
+            html: `<div class="pin ${pulse}" style="color:${color}"><span style="background:${color}"></span></div>`,
             iconSize: [14, 14],
-            iconAnchor: [7, 7]
+            iconAnchor: [7, 7],
         });
-        
-        const marker = L.marker([lead.lat, lead.lon], { icon: customIcon }).addTo(markersGroup);
-        
-        const popupContent = `
-            <div class="map-popup-title">${lead.name}</div>
-            <div class="map-popup-address">${lead.address}</div>
-            <button class="map-popup-btn" onclick="selectLeadById(${lead.id})">Открыть питч</button>
-        `;
-        
-        marker.bindPopup(popupContent);
+        const marker = L.marker([lead.lat, lead.lon], { icon }).addTo(state.markers);
+        marker.bindPopup(`
+            <div class="popup-title">${esc(lead.name)}</div>
+            <div class="popup-addr">${esc(lead.address)}</div>
+            <button class="popup-btn" onclick="window.selectLeadById(${lead.id})">Открыть карточку</button>`);
     });
 }
 
-// Selection helper (called from Leaflet popup button)
-window.selectLeadById = function(id) {
-    const lead = leads.find(l => l.id === id);
-    if (lead) {
-        selectLead(lead);
-        // Find and highlight in table
-        renderLeadsTable();
-        // Pan map center
-        map.setView([lead.lat, lead.lon], 15);
-    }
+window.selectLeadById = (id) => {
+    const lead = state.leads.find((l) => l.id === id);
+    if (lead) selectLead(lead);
 };
 
-// Select a lead and render details / pitch
+// ---------------- Lead detail + pitch ----------------
+function resetDetail() {
+    $("#details-content").classList.add("hidden");
+    $("#details-empty").classList.remove("hidden");
+}
+
 async function selectLead(lead) {
-    selectedLead = lead;
-    
-    // Zoom to coordinate on map
-    map.setView([lead.lat, lead.lon], 15);
-    
-    const emptyPanel = document.getElementById("details-empty");
-    const contentPanel = document.getElementById("details-content");
-    
-    emptyPanel.classList.add("hidden");
-    contentPanel.classList.remove("hidden");
-    
-    // Set default check states based on OSM data
-    const hasDigitalFootprint = lead.website ? "checked" : "";
-    const hasNoRedFlags = !lead.is_chain ? "checked" : "";
-    
-    contentPanel.innerHTML = `
-        <div class="lead-detail-header">
-            <h3>${lead.name}</h3>
-            <div class="lead-detail-meta">
-                <span class="tag tag-primary">${lead.category_label}</span>
-                ${lead.brand ? `<span class="tag tag-warning">Сеть: ${lead.brand}</span>` : '<span class="tag tag-success">Независимый</span>'}
+    state.selected = lead;
+    document.querySelectorAll("#leads-table-body tr").forEach((r) => r.classList.remove("selected"));
+    renderTable();
+    state.map.setView([lead.lat, lead.lon], 15);
+
+    $("#details-empty").classList.add("hidden");
+    const panel = $("#details-content");
+    panel.classList.remove("hidden");
+
+    const bannerClass = COLOR_TO_TAG[lead.potential_color] || "brand";
+    const bannerIcon = lead.potential_score === "HIGH" ? "fa-circle-check"
+        : lead.potential_score === "MEDIUM" ? "fa-circle-half-stroke" : "fa-circle-minus";
+
+    panel.innerHTML = `
+        <div class="lead-head">
+            <h3>${esc(lead.name)}</h3>
+            <div class="lead-meta">
+                <span class="tag tag-brand">${esc(lead.category_label)}</span>
+                ${lead.brand ? `<span class="tag tag-warning">Сеть: ${esc(lead.brand)}</span>` : '<span class="tag tag-success">Независимый</span>'}
+            </div>
+        </div>
+        <div class="lead-rows">
+            <div class="lead-row"><i class="fa-solid fa-location-dot"></i><span class="k">Адрес</span><span class="v">${esc(lead.address)}</span></div>
+            <div class="lead-row"><i class="fa-solid fa-phone"></i><span class="k">Телефон</span><span class="v">${lead.phone ? esc(lead.phone) : '<span class="text-muted">не указан</span>'}</span></div>
+            <div class="lead-row"><i class="fa-solid fa-globe"></i><span class="k">Сайт</span><span class="v">${lead.website ? `<a href="${esc(lead.website)}" target="_blank" rel="noopener">${esc(lead.website)}</a>` : '<span class="text-muted">не указан</span>'}</span></div>
+            ${lead.opening_hours ? `<div class="lead-row"><i class="fa-solid fa-clock"></i><span class="k">Часы</span><span class="v">${esc(lead.opening_hours)}</span></div>` : ""}
+        </div>
+        <div class="banner ${bannerClass}">
+            <i class="fa-solid ${bannerIcon}"></i>
+            <div><strong>Оценка: ${lead.potential_score}</strong><div style="margin-top:3px;color:var(--text-2)">${esc(lead.potential_reason)}</div></div>
+        </div>
+
+        <div class="audit">
+            <div class="audit-top">
+                <h4><i class="fa-solid fa-clipboard-check"></i> Чек-лист «золотой середины»</h4>
+                <span class="audit-score" id="audit-score">0%</span>
+            </div>
+            <div class="audit-bar"><div class="audit-fill" id="audit-fill"></div></div>
+            <div class="audit-list">
+                <label class="audit-item"><input type="checkbox" class="acb"><i class="fa-solid fa-users"></i> Команда 5–30 человек</label>
+                <label class="audit-item"><input type="checkbox" class="acb" ${lead.website ? "checked" : ""}><i class="fa-solid fa-desktop"></i> Есть цифровой след (касса/CRM/сайт)</label>
+                <label class="audit-item"><input type="checkbox" class="acb"><i class="fa-solid fa-chart-line"></i> Поток более 15–20 чеков в день</label>
+                <label class="audit-item"><input type="checkbox" class="acb" ${!lead.is_chain ? "checked" : ""}><i class="fa-solid fa-ban"></i> Без красных флагов (не сеть)</label>
             </div>
         </div>
 
-        <div class="detail-row">
-            <i class="fa-solid fa-map-marker-alt"></i>
-            <span class="label">Адрес:</span>
-            <span>${lead.address}</span>
+        <div class="seg">
+            <button class="seg-btn active" data-type="analytics"><i class="fa-solid fa-chart-pie"></i> Аналитика</button>
+            <button class="seg-btn" data-type="startup"><i class="fa-solid fa-rocket"></i> Стартап</button>
+            <button class="seg-btn" data-type="ai"><i class="fa-solid fa-wand-magic-sparkles"></i> ИИ</button>
         </div>
-        
-        <div class="detail-row">
-            <i class="fa-solid fa-phone"></i>
-            <span class="label">Телефон:</span>
-            <span>${lead.phone ? `<strong>${lead.phone}</strong>` : '<span class="text-muted">Не указан</span>'}</span>
-        </div>
+        <div id="pitch-area"></div>`;
 
-        <div class="detail-row">
-            <i class="fa-solid fa-globe"></i>
-            <span class="label">Сайт:</span>
-            <span>${lead.website ? `<a href="${lead.website}" target="_blank">${lead.website}</a>` : '<span class="text-muted">Не указан</span>'}</span>
-        </div>
-        
-        ${lead.opening_hours ? `
-        <div class="detail-row">
-            <i class="fa-solid fa-clock"></i>
-            <span class="label">Режим работы:</span>
-            <span>${lead.opening_hours}</span>
-        </div>` : ''}
+    panel.querySelectorAll(".acb").forEach((cb) => cb.addEventListener("change", updateAudit));
+    updateAudit();
 
-        <div class="potential-box ${lead.potential_color}">
-            <i class="fa-solid ${lead.potential_score === 'HIGH' ? 'fa-check-circle' : lead.potential_score === 'MEDIUM' ? 'fa-exclamation-circle' : 'fa-minus-circle'}"></i>
-            <div>
-                <strong>Первичная оценка: ${lead.potential_score}</strong>
-                <div style="font-size: 11px; margin-top: 2px;">${lead.potential_reason}</div>
-            </div>
-        </div>
-
-        <!-- Golden Middle Interactive Checklist -->
-        <div class="golden-middle-audit">
-            <div class="audit-header">
-                <h4>🔎 Чек-лист «Золотой Середины»</h4>
-                <div class="audit-score">Соответствие: <strong id="audit-score-pct">0%</strong></div>
-            </div>
-            <div class="audit-progress"><div class="audit-progress-fill" id="audit-progress-bar"></div></div>
-            <div class="audit-checklist">
-                <label class="audit-item">
-                    <input type="checkbox" class="audit-cb" id="audit-size">
-                    <span>👥 Команда от 5 до 30 человек</span>
-                </label>
-                <label class="audit-item">
-                    <input type="checkbox" class="audit-cb" id="audit-digital" ${hasDigitalFootprint}>
-                    <span>💻 Наличие цифрового следа (касса/CRM/сайт)</span>
-                </label>
-                <label class="audit-item">
-                    <input type="checkbox" class="audit-cb" id="audit-volume">
-                    <span>📈 Поток >15-20 транзакций в день</span>
-                </label>
-                <label class="audit-item">
-                    <input type="checkbox" class="audit-cb" id="audit-noflags" ${hasNoRedFlags}>
-                    <span>🚫 Без красных флагов (не франшиза/крупняк)</span>
-                </label>
-            </div>
-        </div>
-
-        <!-- Pitch Mode Tabs -->
-        <div class="pitch-mode-selector">
-            <button class="pitch-mode-btn active" data-type="analytics">
-                <i class="fa-solid fa-chart-pie"></i> Аналитика (iiko/YClients)
-            </button>
-            <button class="pitch-mode-btn" data-type="startup">
-                <i class="fa-solid fa-rocket"></i> Стартап (FastAPI/ML)
-            </button>
-            <button class="pitch-mode-btn" data-type="ai">
-                <i class="fa-solid fa-robot"></i> ИИ Генератор (OpenRouter)
-            </button>
-        </div>
-
-        <div class="pitch-container" id="pitch-container-inner">
-            <!-- Loaded dynamically in updatePitchText -->
-        </div>
-    `;
-
-    // Initialize Checklist Audit Score
-    updateAuditScore();
-    
-    // Attach Checklist listeners
-    document.querySelectorAll(".audit-cb").forEach(cb => {
-        cb.addEventListener("change", updateAuditScore);
-    });
-
-    // Attach Pitch Mode Tabs listeners
-    let currentPitchType = "analytics";
-    document.querySelectorAll(".pitch-mode-btn").forEach(btn => {
-        btn.addEventListener("click", async (e) => {
-            const clickedBtn = e.target.closest(".pitch-mode-btn");
-            if (!clickedBtn) return;
-            
-            document.querySelectorAll(".pitch-mode-btn").forEach(b => b.classList.remove("active"));
-            clickedBtn.classList.add("active");
-            currentPitchType = clickedBtn.dataset.type;
-            
-            await updatePitchText(lead, currentPitchType);
+    let type = "analytics";
+    panel.querySelectorAll(".seg-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            panel.querySelectorAll(".seg-btn").forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+            type = btn.dataset.type;
+            renderPitch(lead, type);
         });
     });
-    
-    // Fetch Pitch from Backend initially
-    await updatePitchText(lead, currentPitchType);
+    renderPitch(lead, "analytics");
 }
 
-// Function to fetch and update pitch fields (includes OpenRouter AI support)
-async function updatePitchText(lead, type) {
-    const pitchContainer = document.getElementById("pitch-container-inner");
-    if (!pitchContainer) return;
-    
-    if (type === "ai") {
-        const apiKey = localStorage.getItem("openrouter_api_key");
-        
-        if (!apiKey) {
-            // Setup Screen HTML
-            pitchContainer.innerHTML = `
-                <div class="ai-setup-container" style="padding: 10px 0;">
-                    <h4 style="font-size: 13px; font-weight:600; display:flex; align-items:center; gap:8px;">
-                        <i class="fa-solid fa-robot" style="color: var(--primary)"></i> Настройка ИИ-генератора
-                    </h4>
-                    <p style="font-size: 11px; color: var(--text-secondary); margin: 10px 0 14px; line-height: 1.6;">
-                        Для генерации уникальных писем с помощью нейросетей укажите ваш API-ключ от сервиса <strong>OpenRouter</strong>. 
-                        Это бесплатно, не требует VPN и банковских карт.
-                    </p>
-                    <div style="font-size: 11px; margin-bottom: 14px;">
-                        <a href="https://openrouter.ai/keys" target="_blank" style="color: var(--primary); text-decoration: none; font-weight:600;">
-                            <i class="fa-solid fa-external-link"></i> Получить бесплатный API-ключ на OpenRouter.ai
-                        </a>
-                    </div>
-                    <div class="pitch-subject-field" style="margin-bottom: 16px; border-radius: 8px;">
-                        <span class="text-muted" style="font-size: 11px; font-weight: 600;">API-ключ:</span>
-                        <input type="password" id="openrouter-key-input" placeholder="sk-or-v1-..." style="width: 80%; border:none; background:none; color:white; font-size:12px;">
-                    </div>
-                    <button id="save-key-btn" class="btn btn-primary btn-block btn-sm">
-                        <i class="fa-solid fa-save"></i> Сохранить ключ
-                    </button>
-                </div>
-            `;
-            
-            // Attach save key listener
-            document.getElementById("save-key-btn").addEventListener("click", () => {
-                const val = document.getElementById("openrouter-key-input").value.trim();
-                if (val) {
-                    localStorage.setItem("openrouter_api_key", val);
-                    updatePitchText(lead, "ai"); // Reload view
-                } else {
-                    alert("Пожалуйста, введите API-ключ.");
-                }
-            });
-            
-        } else {
-            // AI controls Screen HTML
-            pitchContainer.innerHTML = `
-                <div class="ai-generator-controls">
-                    <div class="pitch-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
-                        <h4 style="font-size: 12px; font-weight:600; display:flex; align-items:center; gap:6px;">
-                            <i class="fa-solid fa-robot" style="color: var(--primary)"></i> ИИ Генератор (OpenRouter)
-                        </h4>
-                        <button id="reset-key-link" style="background: none; border: none; color: var(--danger); font-size: 11px; cursor: pointer; display:flex; align-items:center; gap:4px;">
-                            <i class="fa-solid fa-trash-can"></i> Сбросить API-ключ
-                        </button>
-                    </div>
-                    
-                    <div style="display: flex; gap: 10px; margin-bottom: 16px; align-items: flex-end;">
-                        <div style="flex-grow: 1;">
-                            <label style="font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 6px;">Выберите модель ИИ:</label>
-                            <select id="ai-model-select" style="padding: 8px 12px; font-size: 12px; background-color: var(--bg-workspace); border: 1px solid var(--border-color); border-radius: 8px; color: white; width:100%;">
-                                <option value="google/gemma-4-31b-it:free">Gemma 4 31B (Бесплатно, новейшая от Google - Рекомендуется)</option>
-                                <option value="openai/gpt-oss-120b:free">GPT OSS 120B (Бесплатно, мощная и быстрая)</option>
-                                <option value="openai/gpt-oss-20b:free">GPT OSS 20B (Бесплатно, легкая и очень быстрая)</option>
-                                <option value="liquid/lfm-2.5-1.2b-instruct:free">LFM 2.5 1.2B (Бесплатно, компактная)</option>
-                            </select>
-                        </div>
-                        <button id="generate-ai-btn" class="btn btn-primary" style="padding: 8px 16px; font-size: 12px; height: 34px; border-radius:8px;">
-                            <i class="fa-solid fa-wand-magic-sparkles"></i> Сгенерировать
-                        </button>
-                    </div>
+function updateAudit() {
+    const boxes = [...document.querySelectorAll(".acb")];
+    const pct = Math.round((boxes.filter((b) => b.checked).length / boxes.length) * 100);
+    const fill = $("#audit-fill"), score = $("#audit-score");
+    if (fill) fill.style.width = `${pct}%`;
+    if (score) score.textContent = `${pct}%`;
+}
 
-                    <div class="pitch-header">
-                        <h4><i class="fa-solid fa-envelope"></i> Сгенерированное письмо</h4>
-                        <button class="copy-btn" id="copy-all-btn" title="Копировать всё предложение" disabled><i class="fa-solid fa-copy"></i> Копировать</button>
-                    </div>
-                    
-                    <div class="pitch-subject-field">
-                        <span class="text-muted" style="font-size: 11px; font-weight: 600;">Тема:</span>
-                        <input type="text" id="pitch-subject" readonly placeholder="Здесь появится тема письма..." style="font-size:12px; color: white;">
-                        <button class="copy-btn" id="copy-subject-btn" title="Копировать тему" disabled><i class="fa-solid fa-copy"></i></button>
-                    </div>
-                    
-                    <div class="pitch-body-field">
-                        <textarea id="pitch-body" readonly style="height: 200px; font-size:12px; color:white; line-height:1.5;" placeholder="Нажмите «Сгенерировать», чтобы написать письмо с помощью ИИ..."></textarea>
-                        <button class="copy-btn" id="copy-body-btn" style="position: absolute; right: 12px; bottom: 12px;" title="Копировать тело письма" disabled><i class="fa-solid fa-copy"></i> Копировать текст</button>
-                    </div>
-                </div>
-            `;
-            
-            // Attach reset key listener
-            document.getElementById("reset-key-link").addEventListener("click", () => {
-                if(confirm("Вы действительно хотите удалить сохраненный API-ключ?")) {
-                    localStorage.removeItem("openrouter_api_key");
-                    updatePitchText(lead, "ai");
-                }
-            });
-            
-            // Attach generate key listener
-            document.getElementById("generate-ai-btn").addEventListener("click", async () => {
-                const model = document.getElementById("ai-model-select").value;
-                const genBtn = document.getElementById("generate-ai-btn");
-                const pitchSubject = document.getElementById("pitch-subject");
-                const pitchBody = document.getElementById("pitch-body");
-                
-                genBtn.disabled = true;
-                genBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Пишет...`;
-                
-                pitchSubject.value = "ИИ формулирует тему...";
-                pitchBody.value = "ИИ думает и пишет сопроводительное письмо (обычно 5-15 секунд)... Пожалуйста, подождите.";
-                
-                try {
-                    const res = await fetch("/api/pitch/ai", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            business_name: lead.name,
-                            category_label: lead.category_label,
-                            website: lead.website,
-                            phone: lead.phone,
-                            api_key: apiKey,
-                            model: model
-                        })
-                    });
-                    
-                    if (!res.ok) {
-                        const errText = await res.text();
-                        throw new Error(errText);
-                    }
-                    
-                    const pitch = await res.json();
-                    
-                    pitchSubject.value = pitch.subject;
-                    pitchBody.value = pitch.body;
-                    
-                    // Enable copy buttons
-                    const copyBtns = document.querySelectorAll(".pitch-container .copy-btn");
-                    copyBtns.forEach(btn => btn.removeAttribute("disabled"));
-                    
-                    // Setup copy listeners
-                    setupCopyListeners(pitch.subject, pitch.body);
-                    
-                } catch (err) {
-                    console.error("AI Generation error:", err);
-                    pitchSubject.value = "Ошибка генерации";
-                    pitchBody.value = `Не удалось сгенерировать письмо нейросетью.\n\nВозможная причина: неверный API-ключ или лимиты на сервере.\nДетали ошибки: ${err.message || err}`;
-                } finally {
-                    genBtn.disabled = false;
-                    genBtn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Сгенерировать`;
-                }
-            });
+// ---------------- Pitch rendering ----------------
+async function renderPitch(lead, type) {
+    const area = $("#pitch-area");
+    if (!area) return;
+
+    if (type === "ai") { renderAI(lead, area); return; }
+
+    area.innerHTML = `
+        <div class="pitch-area">
+            <div class="pitch-bar">
+                <h4><i class="fa-solid fa-envelope"></i> Готовое письмо</h4>
+                <button class="copy-btn" id="copy-all"><i class="fa-solid fa-copy"></i> Копировать</button>
+            </div>
+            <div class="field"><div class="field-row"><span class="k">Тема</span><input id="p-subject" readonly value="Загрузка…">
+                <button class="copy-btn" id="copy-subject"><i class="fa-solid fa-copy"></i></button></div></div>
+            <div class="field"><textarea id="p-body" readonly>Генерация предложения…</textarea>
+                <button class="copy-btn copy-float" id="copy-body"><i class="fa-solid fa-copy"></i> Текст</button></div>
+        </div>`;
+
+    try {
+        const res = await fetch("/api/pitch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ business_name: lead.name, category_key: lead.category_key, website: lead.website, phone: lead.phone, pitch_type: type }),
+        });
+        const pitch = await res.json();
+        $("#p-subject").value = pitch.subject;
+        $("#p-body").value = pitch.body;
+        wireCopy(pitch.subject, pitch.body);
+    } catch {
+        $("#p-subject").value = "Ошибка генерации";
+        $("#p-body").value = "Не удалось сгенерировать предложение.";
+        toast("error", "Не удалось сгенерировать письмо");
+    }
+}
+
+function renderAI(lead, area) {
+    const key = localStorage.getItem("openrouter_api_key");
+    if (!key) {
+        area.innerHTML = `
+            <div class="ai-setup">
+                <h4><i class="fa-solid fa-robot"></i> Настройка ИИ-генератора</h4>
+                <p>Для генерации уникальных писем нейросетью укажите API-ключ от <strong>OpenRouter</strong>. Это бесплатно, без VPN и карт.</p>
+                <p><a class="link" href="https://openrouter.ai/keys" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> Получить бесплатный ключ</a></p>
+                <div class="field"><div class="field-row"><span class="k">Ключ</span><input type="password" id="ai-key" placeholder="sk-or-v1-…"></div></div>
+                <button class="btn btn-primary btn-block btn-sm" id="ai-save"><i class="fa-solid fa-floppy-disk"></i> Сохранить ключ</button>
+            </div>`;
+        $("#ai-save").addEventListener("click", () => {
+            const v = $("#ai-key").value.trim();
+            if (!v) { toast("error", "Введите API-ключ"); return; }
+            localStorage.setItem("openrouter_api_key", v);
+            toast("success", "Ключ сохранён");
+            renderAI(lead, area);
+        });
+        return;
+    }
+
+    area.innerHTML = `
+        <div class="pitch-area">
+            <div class="pitch-bar">
+                <h4><i class="fa-solid fa-robot"></i> ИИ-генератор</h4>
+                <button class="ai-reset" id="ai-reset"><i class="fa-solid fa-trash-can"></i> Сбросить ключ</button>
+            </div>
+            <div class="ai-row">
+                <div class="field"><div class="field-row"><span class="k">Модель</span>
+                    <select id="ai-model" style="border:none;background:none;padding:0">
+                        <option value="openai/gpt-oss-20b:free">GPT-OSS 20B (быстрая, бесплатно)</option>
+                        <option value="openai/gpt-oss-120b:free">GPT-OSS 120B (мощная, бесплатно)</option>
+                        <option value="google/gemma-2-9b-it:free">Gemma 2 9B (бесплатно)</option>
+                        <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (бесплатно)</option>
+                    </select></div></div>
+                <button class="btn btn-primary btn-sm" id="ai-gen"><i class="fa-solid fa-wand-magic-sparkles"></i> Сгенерировать</button>
+            </div>
+            <div class="pitch-bar">
+                <h4><i class="fa-solid fa-envelope"></i> Письмо</h4>
+                <button class="copy-btn" id="copy-all" disabled><i class="fa-solid fa-copy"></i> Копировать</button>
+            </div>
+            <div class="field"><div class="field-row"><span class="k">Тема</span><input id="p-subject" readonly placeholder="Появится тема…">
+                <button class="copy-btn" id="copy-subject" disabled><i class="fa-solid fa-copy"></i></button></div></div>
+            <div class="field"><textarea id="p-body" readonly placeholder="Нажмите «Сгенерировать»…"></textarea>
+                <button class="copy-btn copy-float" id="copy-body" disabled><i class="fa-solid fa-copy"></i> Текст</button></div>
+        </div>`;
+
+    $("#ai-reset").addEventListener("click", () => {
+        if (confirm("Удалить сохранённый API-ключ?")) {
+            localStorage.removeItem("openrouter_api_key");
+            renderAI(lead, area);
         }
-        
-    } else {
-        // Standard template view HTML
-        pitchContainer.innerHTML = `
-            <div class="pitch-header">
-                <h4><i class="fa-solid fa-magic"></i> Готовый питч (на русском)</h4>
-                <button class="copy-btn" id="copy-all-btn" title="Копировать всё предложение"><i class="fa-solid fa-copy"></i> Копировать</button>
-            </div>
-            
-            <div class="pitch-subject-field">
-                <span class="text-muted" style="font-size: 11px; font-weight: 600;">Тема:</span>
-                <input type="text" id="pitch-subject" readonly value="Загрузка темы...">
-                <button class="copy-btn" id="copy-subject-btn" title="Копировать тему"><i class="fa-solid fa-copy"></i></button>
-            </div>
-            
-            <div class="pitch-body-field">
-                <textarea id="pitch-body" readonly>Генерация коммерческого предложения...</textarea>
-                <button class="copy-btn" id="copy-body-btn" style="position: absolute; right: 12px; bottom: 12px;" title="Копировать тело письма"><i class="fa-solid fa-copy"></i> Копировать текст</button>
-            </div>
-        `;
-        
-        const pitchSubject = document.getElementById("pitch-subject");
-        const pitchBody = document.getElementById("pitch-body");
-        
+    });
+
+    $("#ai-gen").addEventListener("click", async () => {
+        const model = $("#ai-model").value;
+        const btn = $("#ai-gen");
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Пишет…`;
+        $("#p-subject").value = "ИИ формулирует…";
+        $("#p-body").value = "Нейросеть пишет письмо (5–15 секунд)…";
         try {
-            const res = await fetch("/api/pitch", {
+            const res = await fetch("/api/pitch/ai", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    business_name: lead.name,
-                    category_key: lead.category_key,
-                    website: lead.website,
-                    phone: lead.phone,
-                    pitch_type: type
-                })
+                body: JSON.stringify({ business_name: lead.name, category_label: lead.category_label, website: lead.website, phone: lead.phone, api_key: key, model }),
             });
-            
+            if (!res.ok) throw new Error(await res.text());
             const pitch = await res.json();
-            
-            pitchSubject.value = pitch.subject;
-            pitchBody.value = pitch.body;
-            
-            // Setup copy buttons listeners
-            setupCopyListeners(pitch.subject, pitch.body);
-            
+            $("#p-subject").value = pitch.subject;
+            $("#p-body").value = pitch.body;
+            area.querySelectorAll(".copy-btn").forEach((b) => (b.disabled = false));
+            wireCopy(pitch.subject, pitch.body);
+            toast("success", "Письмо сгенерировано");
         } catch (err) {
-            console.error("Error generating pitch:", err);
-            pitchSubject.value = "Ошибка генерации";
-            pitchBody.value = "Не удалось сгенерировать предложение.";
+            $("#p-subject").value = "Ошибка генерации";
+            $("#p-body").value = `Не удалось сгенерировать письмо.\nВозможно, неверный ключ или лимит модели.\n\n${shortErr(err)}`;
+            toast("error", "Ошибка генерации ИИ");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Сгенерировать`;
         }
-    }
-}
-
-// Dynamic Audit Score calculation
-function updateAuditScore() {
-    const checkboxes = document.querySelectorAll(".audit-cb");
-    const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-    const pct = Math.round((checkedCount / checkboxes.length) * 100);
-    
-    const scoreText = document.getElementById("audit-score-pct");
-    const progressFill = document.getElementById("audit-progress-bar");
-    
-    scoreText.textContent = `${pct}%`;
-    progressFill.style.width = `${pct}%`;
-    
-    // Clear color classes
-    progressFill.className = "audit-progress-fill";
-    scoreText.className = "";
-    
-    if (pct <= 25) {
-        progressFill.classList.add("bg-danger");
-        scoreText.classList.add("text-danger");
-    } else if (pct === 50) {
-        progressFill.classList.add("bg-warning");
-        scoreText.classList.add("text-warning");
-    } else if (pct === 75) {
-        progressFill.classList.add("bg-primary");
-        scoreText.classList.add("text-primary");
-    } else if (pct === 100) {
-        progressFill.classList.add("bg-success");
-        scoreText.classList.add("text-success");
-    }
-}
-
-// Copy button handlers with micro-animations
-function setupCopyListeners(subject, body) {
-    const copySubject = document.getElementById("copy-subject-btn");
-    const copyBody = document.getElementById("copy-body-btn");
-    const copyAll = document.getElementById("copy-all-btn");
-
-    copySubject.addEventListener("click", () => {
-        navigator.clipboard.writeText(subject);
-        showCopiedFeedback(copySubject, '<i class="fa-solid fa-check" style="color: var(--success)"></i>');
-    });
-
-    copyBody.addEventListener("click", () => {
-        navigator.clipboard.writeText(body);
-        showCopiedFeedback(copyBody, '<i class="fa-solid fa-check" style="color: var(--success)"></i> Скопировано!');
-    });
-
-    copyAll.addEventListener("click", () => {
-        const combined = `Тема: ${subject}\n\n${body}`;
-        navigator.clipboard.writeText(combined);
-        showCopiedFeedback(copyAll, '<i class="fa-solid fa-check" style="color: var(--success)"></i> Скопировано всё!');
     });
 }
 
-function showCopiedFeedback(btn, successHtml) {
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = successHtml;
-    btn.disabled = true;
-    
-    setTimeout(() => {
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-    }, 2000);
+function wireCopy(subject, body) {
+    const bind = (id, text, label) => {
+        const el = $(`#${id}`);
+        if (!el) return;
+        el.onclick = () => {
+            navigator.clipboard.writeText(text);
+            const orig = el.innerHTML;
+            el.innerHTML = `<i class="fa-solid fa-check" style="color:var(--success)"></i>${label ? " " + label : ""}`;
+            setTimeout(() => (el.innerHTML = orig), 1600);
+            toast("success", "Скопировано в буфер обмена");
+        };
+    };
+    bind("copy-subject", subject, "");
+    bind("copy-body", body, "Текст");
+    bind("copy-all", `Тема: ${subject}\n\n${body}`, "Копировать");
 }
 
-// Export data as CSV/XLSX
+// ---------------- Export ----------------
 async function exportData(format) {
-    if (filteredLeads.length === 0) return;
-    
-    const btn = document.getElementById(`export-${format}-btn`);
-    const originalText = btn.innerHTML;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Сборка...`;
-    
+    if (state.filtered.length === 0) return;
+    const btn = $(`#export-${format === "xlsx" ? "excel" : "csv"}-btn`);
+    const orig = btn.innerHTML;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Сборка…`;
     try {
         const res = await fetch("/api/export", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                leads: filteredLeads,
-                format: format
-            })
+            body: JSON.stringify({ leads: state.filtered, format }),
         });
-        
         if (!res.ok) throw new Error("Export failed");
-        
         const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
         a.download = `analytics_leads_${new Date().toISOString().slice(0, 10)}.${format}`;
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-    } catch (err) {
-        console.error("Export error:", err);
-        alert("Не удалось экспортировать данные.");
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast("success", `Экспортировано ${state.filtered.length} лидов`);
+    } catch {
+        toast("error", "Не удалось экспортировать данные");
     } finally {
-        btn.innerHTML = originalText;
+        btn.innerHTML = orig;
     }
+}
+
+// ---------------- Loader ----------------
+function showLoader(text) { setLoaderText(text); $("#loader-overlay").classList.remove("hidden"); }
+function hideLoader() { $("#loader-overlay").classList.add("hidden"); }
+function setLoaderText(text) { $("#loader-status").textContent = text; }
+
+// ---------------- Toasts ----------------
+function toast(type, msg) {
+    const icons = { success: "fa-circle-check", error: "fa-circle-exclamation", info: "fa-circle-info" };
+    const el = document.createElement("div");
+    el.className = `toast ${type}`;
+    el.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span class="toast-msg">${esc(msg)}</span>`;
+    $("#toasts").appendChild(el);
+    setTimeout(() => {
+        el.classList.add("out");
+        setTimeout(() => el.remove(), 250);
+    }, 3600);
+}
+
+// ---------------- Utils ----------------
+function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function shortErr(err) {
+    const m = err && err.message ? err.message : String(err);
+    return m.length > 160 ? m.slice(0, 160) + "…" : m;
 }

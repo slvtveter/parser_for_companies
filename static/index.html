@@ -3,148 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LeadAnalytics - Парсер и Лидогенератор для Аналитиков</title>
-    <!-- Google Fonts -->
+    <meta name="description" content="LeadAnalytics — парсер локального бизнеса из OpenStreetMap с оценкой аналитического потенциала и генератором холодных писем.">
+    <meta name="theme-color" content="#0a0b12">
+    <title>LeadAnalytics — лидогенератор для аналитиков данных</title>
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- FontAwesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Leaflet Map CSS -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar Controls -->
+    <!-- Анимированный фон -->
+    <div class="aurora" aria-hidden="true">
+        <span class="blob blob-1"></span>
+        <span class="blob blob-2"></span>
+        <span class="blob blob-3"></span>
+        <div class="grid-overlay"></div>
+    </div>
+
+    <div class="app">
+        <!-- Боковая панель управления -->
         <aside class="sidebar">
-            <div class="logo-area">
-                <div class="logo-icon"><i class="fa-solid fa-chart-line"></i></div>
-                <div class="logo-text">
+            <div class="brand">
+                <div class="brand-mark"><i class="fa-solid fa-chart-line"></i></div>
+                <div class="brand-text">
                     <h1>LeadAnalytics</h1>
-                    <span>Парсер клиентов для портфолио</span>
+                    <span>Поиск клиентов для портфолио</span>
                 </div>
             </div>
 
-            <div class="control-section">
-                <label for="city-select"><i class="fa-solid fa-location-dot"></i> Выберите город</label>
-                <div class="select-wrapper">
+            <div class="control">
+                <label for="city-select"><i class="fa-solid fa-location-dot"></i> Город</label>
+                <div class="select-wrap">
                     <select id="city-select">
-                        <option value="" disabled selected>Загрузка городов...</option>
+                        <option value="" disabled selected>Загрузка…</option>
                     </select>
+                    <i class="fa-solid fa-chevron-down select-arrow"></i>
                 </div>
             </div>
 
-            <div class="control-section">
+            <div class="control">
                 <label><i class="fa-solid fa-store"></i> Сферы бизнеса</label>
-                <div id="categories-list" class="checkbox-group">
-                    <!-- Loaded dynamically -->
-                    <div class="loading-placeholder">Загрузка сфер...</div>
+                <div id="categories-list" class="chips">
+                    <div class="chips-skeleton">
+                        <span></span><span></span><span></span><span></span>
+                    </div>
                 </div>
             </div>
 
-            <button id="search-btn" class="btn btn-primary btn-block">
-                <i class="fa-solid fa-magnifying-glass"></i> Найти клиентов
+            <button id="search-btn" class="btn btn-primary btn-block btn-glow">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <span>Найти клиентов</span>
             </button>
 
-            <div class="info-footer">
-                <p><i class="fa-solid fa-circle-info"></i> Поиск работает через OpenStreetMap API. Это полностью бесплатно и не требует прокси.</p>
+            <div class="sidebar-foot">
+                <div class="source-status">
+                    <span class="pulse-dot"></span>
+                    <div>
+                        <strong>OpenStreetMap</strong>
+                        <span>Бесплатный источник, без прокси и ключей</span>
+                    </div>
+                </div>
+                <a class="ghost-link" href="https://github.com/slvtveter/parser_for_companies" target="_blank" rel="noopener">
+                    <i class="fa-brands fa-github"></i> Исходный код проекта
+                </a>
             </div>
         </aside>
 
-        <!-- Main Content Panel -->
-        <main class="main-content">
-            <!-- Top Dashboard Stats -->
-            <header class="dashboard-header">
-                <div class="stat-card" id="stat-total">
-                    <div class="stat-icon"><i class="fa-solid fa-list-check"></i></div>
-                    <div class="stat-info">
-                        <h3>0</h3>
-                        <span>Всего найдено</span>
-                    </div>
+        <!-- Основная область -->
+        <main class="main">
+            <header class="topbar">
+                <div class="topbar-title">
+                    <h2>Панель лидогенерации</h2>
+                    <p id="result-summary">Запустите поиск, чтобы собрать базу заведений</p>
                 </div>
-                <div class="stat-card stat-high" id="stat-high">
-                    <div class="stat-icon"><i class="fa-solid fa-circle-check"></i></div>
-                    <div class="stat-info">
-                        <h3>0</h3>
-                        <span>Высокий потенциал</span>
-                    </div>
-                </div>
-                <div class="stat-card stat-medium" id="stat-medium">
-                    <div class="stat-icon"><i class="fa-solid fa-circle-exclamation"></i></div>
-                    <div class="stat-info">
-                        <h3>0</h3>
-                        <span>Средний потенциал</span>
-                    </div>
-                </div>
-                <div class="stat-card stat-low" id="stat-low">
-                    <div class="stat-icon"><i class="fa-solid fa-circle-minus"></i></div>
-                    <div class="stat-info">
-                        <h3>0</h3>
-                        <span>Низкий потенциал</span>
-                    </div>
+                <div class="topbar-meta" id="cached-badge" hidden>
+                    <i class="fa-solid fa-bolt"></i> из кэша
                 </div>
             </header>
 
-            <!-- Map and Table Layout -->
-            <div class="workspace-grid">
-                <!-- Map Section -->
-                <section class="map-section card">
-                    <div class="card-header">
-                        <h2><i class="fa-solid fa-map-location-dot"></i> Интерактивная карта заведений</h2>
-                        <span class="badge" id="map-counter">0 отметок</span>
+            <!-- Статистика -->
+            <section class="stats">
+                <article class="stat" data-variant="total">
+                    <div class="stat-ico"><i class="fa-solid fa-layer-group"></i></div>
+                    <div class="stat-body">
+                        <span class="stat-num" data-counter id="stat-total">0</span>
+                        <span class="stat-label">Всего найдено</span>
                     </div>
-                    <div class="card-body">
+                </article>
+                <article class="stat" data-variant="high">
+                    <div class="stat-ico"><i class="fa-solid fa-circle-check"></i></div>
+                    <div class="stat-body">
+                        <span class="stat-num" data-counter id="stat-high">0</span>
+                        <span class="stat-label">Высокий потенциал</span>
+                    </div>
+                </article>
+                <article class="stat" data-variant="medium">
+                    <div class="stat-ico"><i class="fa-solid fa-circle-half-stroke"></i></div>
+                    <div class="stat-body">
+                        <span class="stat-num" data-counter id="stat-medium">0</span>
+                        <span class="stat-label">Средний потенциал</span>
+                    </div>
+                </article>
+                <article class="stat" data-variant="low">
+                    <div class="stat-ico"><i class="fa-solid fa-circle-minus"></i></div>
+                    <div class="stat-body">
+                        <span class="stat-num" data-counter id="stat-low">0</span>
+                        <span class="stat-label">Низкий потенциал</span>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Карта + карточка лида -->
+            <section class="workspace">
+                <section class="card map-card">
+                    <div class="card-head">
+                        <h3><i class="fa-solid fa-map-location-dot"></i> Карта заведений</h3>
+                        <span class="chip-badge" id="map-counter">0 отметок</span>
+                    </div>
+                    <div class="card-body no-pad">
                         <div id="map"></div>
+                        <div class="map-legend">
+                            <span><i class="dot dot-high"></i> Высокий</span>
+                            <span><i class="dot dot-medium"></i> Средний</span>
+                            <span><i class="dot dot-low"></i> Низкий</span>
+                            <span><i class="dot dot-chain"></i> Сеть</span>
+                        </div>
                     </div>
                 </section>
 
-                <!-- Details Section / Pitch Generator -->
-                <section class="details-section card" id="details-panel">
-                    <div class="card-header">
-                        <h2><i class="fa-solid fa-envelope-open-text"></i> Карточка лида и питч</h2>
+                <section class="card detail-card">
+                    <div class="card-head">
+                        <h3><i class="fa-solid fa-envelope-open-text"></i> Карточка лида</h3>
                     </div>
                     <div class="card-body" id="details-empty">
-                        <div class="empty-state">
-                            <i class="fa-solid fa-hand-pointer"></i>
-                            <p>Выберите заведение на карте или в таблице, чтобы посмотреть информацию и сгенерировать коммерческое предложение.</p>
+                        <div class="empty">
+                            <div class="empty-ico"><i class="fa-solid fa-hand-pointer"></i></div>
+                            <p>Выберите заведение на карте или в таблице, чтобы увидеть детали и сгенерировать письмо.</p>
                         </div>
                     </div>
-                    <div class="card-body hidden" id="details-content">
-                        <!-- Loaded dynamically -->
-                    </div>
+                    <div class="card-body hidden" id="details-content"></div>
                 </section>
-            </div>
+            </section>
 
-            <!-- Leads Table Section -->
-            <section class="table-section card">
-                <div class="card-header flex-header">
-                    <div class="header-left">
-                        <h2><i class="fa-solid fa-table"></i> Найденные организации</h2>
+            <!-- Таблица -->
+            <section class="card table-card">
+                <div class="card-head table-head">
+                    <div class="table-head-left">
+                        <h3><i class="fa-solid fa-table-list"></i> Найденные организации</h3>
                         <div class="search-box">
-                            <i class="fa-solid fa-search"></i>
-                            <input type="text" id="table-search" placeholder="Поиск по названию или адресу...">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="table-search" placeholder="Поиск по названию или адресу…">
                         </div>
                     </div>
-                    <div class="header-right">
-                        <div class="filter-badges">
-                            <button class="badge-btn active" data-filter="all">Все</button>
-                            <button class="badge-btn" data-filter="HIGH">Высокий потенциал</button>
-                            <button class="badge-btn" data-filter="contacts">Есть контакты</button>
-                            <button class="badge-btn" data-filter="independent">Без сетей</button>
+                    <div class="table-head-right">
+                        <div class="filter-chips">
+                            <button class="filter-chip active" data-filter="all">Все</button>
+                            <button class="filter-chip" data-filter="HIGH">Высокий</button>
+                            <button class="filter-chip" data-filter="contacts">С контактами</button>
+                            <button class="filter-chip" data-filter="independent">Без сетей</button>
                         </div>
-                        <div class="export-actions">
-                            <button id="export-excel-btn" class="btn btn-secondary btn-sm" disabled>
+                        <div class="export-group">
+                            <button id="export-excel-btn" class="btn btn-ghost btn-sm" disabled>
                                 <i class="fa-solid fa-file-excel"></i> Excel
                             </button>
-                            <button id="export-csv-btn" class="btn btn-secondary btn-sm" disabled>
+                            <button id="export-csv-btn" class="btn btn-ghost btn-sm" disabled>
                                 <i class="fa-solid fa-file-csv"></i> CSV
                             </button>
                         </div>
                     </div>
                 </div>
-                <div class="card-body table-responsive">
+                <div class="card-body no-pad table-scroll">
                     <table class="leads-table">
                         <thead>
                             <tr>
@@ -153,35 +187,40 @@
                                 <th>Адрес</th>
                                 <th>Контакты</th>
                                 <th>Потенциал</th>
-                                <th>Сеть/Бренд</th>
+                                <th>Сеть</th>
                             </tr>
                         </thead>
                         <tbody id="leads-table-body">
-                            <tr>
-                                <td colspan="6" class="text-center">Запустите поиск в левой панели, чтобы собрать базу данных.</td>
-                            </tr>
+                            <tr><td colspan="6" class="table-empty">Запустите поиск в левой панели, чтобы собрать базу данных.</td></tr>
                         </tbody>
                     </table>
                 </div>
             </section>
+
+            <footer class="page-foot">
+                <span>LeadAnalytics</span>
+                <span class="dot-sep"></span>
+                <span>Данные: OpenStreetMap Overpass API</span>
+                <span class="dot-sep"></span>
+                <span>FastAPI · Leaflet</span>
+            </footer>
         </main>
     </div>
 
-    <!-- Scraper Loader Overlay -->
-    <div class="loader-overlay hidden" id="loader-overlay">
-        <div class="loader-box">
-            <div class="spinner"></div>
-            <h3>Идет сбор данных...</h3>
-            <p id="loader-status">Отправка запроса к OpenStreetMap Overpass API (обычно занимает от 5 до 20 секунд)...</p>
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill" id="loader-progress"></div>
-            </div>
+    <!-- Оверлей загрузки -->
+    <div class="overlay hidden" id="loader-overlay">
+        <div class="loader-card">
+            <div class="orbit"><span></span><span></span><span></span></div>
+            <h3>Собираем данные</h3>
+            <p id="loader-status">Отправляем запрос в OpenStreetMap…</p>
+            <div class="progress"><div class="progress-fill" id="loader-progress"></div></div>
         </div>
     </div>
 
-    <!-- Leaflet Map JS -->
+    <!-- Тосты -->
+    <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- Custom JS -->
     <script src="app.js"></script>
 </body>
 </html>

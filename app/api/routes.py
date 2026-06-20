@@ -20,6 +20,7 @@ from app.schemas import (
     SearchResponse,
 )
 from app.services.ai import AIPitchError, generate_ai_pitch
+from app.services.cache import TTLCache
 from app.services.export import build_export
 from app.services.osm import OverpassError, process_osm_data, query_osm_businesses
 from app.services.pitch import build_template_pitch
@@ -27,6 +28,9 @@ from app.services.pitch import build_template_pitch
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["leads"])
+
+# Кэш результатов поиска: повторные одинаковые запросы не идут в Overpass.
+_search_cache = TTLCache(ttl=get_settings().cache_ttl)
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -50,6 +54,11 @@ def get_categories() -> list[dict]:
 @router.post("/search", response_model=SearchResponse)
 def search_leads(req: SearchRequest) -> SearchResponse:
     """Ищет заведения через Overpass API и оценивает их потенциал."""
+    cache_key = (req.city.strip().lower(), tuple(sorted(set(req.categories))))
+    cached = _search_cache.get(cache_key)
+    if cached is not None:
+        return SearchResponse(total=len(cached), leads=cached, cached=True)
+
     try:
         raw = query_osm_businesses(req.city, req.categories)
         leads = process_osm_data(raw)
@@ -58,7 +67,9 @@ def search_leads(req: SearchRequest) -> SearchResponse:
     except Exception as exc:  # noqa: BLE001 - возвращаем читаемую ошибку клиенту
         logger.exception("Ошибка при поиске лидов")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return SearchResponse(total=len(leads), leads=leads)
+
+    _search_cache.set(cache_key, leads)
+    return SearchResponse(total=len(leads), leads=leads, cached=False)
 
 
 @router.post("/pitch", response_model=PitchResponse)

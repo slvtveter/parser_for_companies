@@ -42,6 +42,7 @@ class SearchResponse(BaseModel):
     status: str = "success"
     total: int
     leads: list[Lead]
+    cached: bool = False
 
 
 class ExportRequest(BaseModel):

@@ -69,9 +69,30 @@ def test_export_empty_rejected(client):
 
 def test_search_with_mocked_overpass(client, sample_osm_payload, monkeypatch):
     """Эндпоинт /api/search с подменённым Overpass-клиентом (без реальной сети)."""
+    routes._search_cache.clear()
     monkeypatch.setattr(routes, "query_osm_businesses", lambda city, cats: sample_osm_payload)
     res = client.post("/api/search", json={"city": "Москва", "categories": ["cafe"]})
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "success"
     assert data["total"] == 3
+    assert data["cached"] is False
+
+
+def test_search_uses_cache_on_repeat(client, sample_osm_payload, monkeypatch):
+    """Повторный одинаковый запрос обслуживается из кэша без вызова Overpass."""
+    routes._search_cache.clear()
+    calls = {"n": 0}
+
+    def fake_query(city, cats):
+        calls["n"] += 1
+        return sample_osm_payload
+
+    monkeypatch.setattr(routes, "query_osm_businesses", fake_query)
+
+    first = client.post("/api/search", json={"city": "Казань", "categories": ["cafe"]})
+    second = client.post("/api/search", json={"city": "Казань", "categories": ["cafe"]})
+
+    assert first.json()["cached"] is False
+    assert second.json()["cached"] is True
+    assert calls["n"] == 1  # Overpass вызван только один раз
