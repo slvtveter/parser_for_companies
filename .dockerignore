@@ -10,7 +10,7 @@ __pycache__
 .idea
 .vscode
 tests
-notebooks
+analysis
 *.ipynb
 *.csv
 .env
