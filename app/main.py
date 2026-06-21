@@ -39,6 +39,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Отключаем кэширование статики, чтобы браузер всегда брал свежие JS/CSS.
+    @app.middleware("http")
+    async def _no_store(request, call_next):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     # Сначала маршруты API, затем — отдача статики на "/".
     app.include_router(router)
 

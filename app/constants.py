@@ -15,15 +15,15 @@ CITIES: list[dict[str, str]] = [
     {"name": "Владивосток", "latin": "Vladivostok"},
 ]
 
-# Категории бизнеса для UI.
+# Категории бизнеса для UI (короткие подписи для чипов).
 CATEGORIES: list[dict[str, str]] = [
-    {"id": "cafe", "name": "Кофейни и кафе"},
+    {"id": "cafe", "name": "Кофейни"},
     {"id": "bakery", "name": "Пекарни"},
     {"id": "confectionery", "name": "Кондитерские"},
     {"id": "restaurant", "name": "Рестораны"},
-    {"id": "fast_food", "name": "Фастфуд и бистро"},
-    {"id": "beauty", "name": "Салоны красоты"},
-    {"id": "florist", "name": "Цветочные магазины"},
+    {"id": "fast_food", "name": "Фастфуд"},
+    {"id": "beauty", "name": "Красота"},
+    {"id": "florist", "name": "Цветы"},
 ]
 
 # Сопоставление наших категорий с тегами OpenStreetMap (ключ, значение).

@@ -178,11 +178,11 @@ select:hover { border-color: var(--border-strong); background: var(--surface-2);
 select:focus { outline: none; border-color: var(--brand); box-shadow: var(--ring); }
 option { background: #14161f; color: var(--text); }
 
-/* Category chips */
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Category chips — ровная сетка 2 колонки */
+.chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 7px 11px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: flex-start; gap: 7px; width: 100%;
+    padding: 8px 12px; border-radius: 10px;
     background: var(--surface); border: 1px solid var(--border);
     color: var(--text-2); font: inherit; font-size: 12px; font-weight: 500;
     cursor: pointer; transition: var(--t); user-select: none;
