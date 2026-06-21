@@ -56,48 +56,38 @@
                 <i class="fa-solid fa-magnifying-glass"></i> <span>Найти клиентов</span>
             </button>
 
-            <div class="filters" id="filters">
-                <div class="filters-head">
+            <div class="filters">
+                <button class="filters-toggle" id="filters-toggle" aria-expanded="false">
                     <span><i class="fa-solid fa-sliders"></i> Фильтры</span>
-                    <button id="filters-reset" class="link-btn">Сбросить</button>
-                </div>
-
-                <div class="filter-block">
-                    <div class="filter-row-label">Минимальный балл: <strong id="score-val">0</strong></div>
-                    <input type="range" id="score-min" min="0" max="100" value="0" step="5">
-                </div>
-
-                <div class="filter-block">
-                    <div class="toggle-row">
-                        <label class="toggle"><input type="checkbox" id="f-independent"> Только независимые</label>
-                        <label class="toggle"><input type="checkbox" id="f-phone"> Есть телефон</label>
-                        <label class="toggle"><input type="checkbox" id="f-website"> Есть сайт</label>
-                        <label class="toggle"><input type="checkbox" id="f-social"> Есть соцсети</label>
-                        <label class="toggle"><input type="checkbox" id="f-email"> Есть email</label>
-                        <label class="toggle"><input type="checkbox" id="f-hours"> Есть часы</label>
+                    <i class="fa-solid fa-chevron-down chev"></i>
+                </button>
+                <div class="filters-body hidden" id="filters-body">
+                    <div class="filter-block">
+                        <div class="filter-row-label">Минимальный балл: <strong id="score-val">0</strong></div>
+                        <input type="range" id="score-min" min="0" max="100" value="0" step="5">
                     </div>
-                </div>
-
-                <div class="filter-block">
-                    <button id="near-toggle" class="btn btn-ghost btn-sm btn-block">
-                        <i class="fa-solid fa-crosshairs"></i> Искать рядом с точкой
-                    </button>
-                    <div id="near-controls" class="near-controls hidden">
-                        <div class="filter-row-label">Радиус: <strong id="radius-val">1.0</strong> км</div>
-                        <input type="range" id="radius" min="0.3" max="5" value="1" step="0.1">
-                        <div class="near-hint" id="near-hint">Кликните по карте, чтобы поставить точку.</div>
+                    <div class="filter-block">
+                        <div class="toggle-row">
+                            <label class="toggle"><input type="checkbox" id="f-independent"> Только независимые</label>
+                            <label class="toggle"><input type="checkbox" id="f-phone"> Есть телефон</label>
+                            <label class="toggle"><input type="checkbox" id="f-website"> Есть сайт</label>
+                            <label class="toggle"><input type="checkbox" id="f-social"> Есть соцсети</label>
+                            <label class="toggle"><input type="checkbox" id="f-email"> Есть email</label>
+                            <label class="toggle"><input type="checkbox" id="f-hours"> Есть часы</label>
+                        </div>
                     </div>
+                    <div class="filter-block">
+                        <button id="near-toggle" class="btn btn-ghost btn-sm btn-block">
+                            <i class="fa-solid fa-crosshairs"></i> Искать рядом с точкой
+                        </button>
+                        <div id="near-controls" class="near-controls hidden">
+                            <div class="filter-row-label">Радиус: <strong id="radius-val">1.0</strong> км</div>
+                            <input type="range" id="radius" min="0.3" max="5" value="1" step="0.1">
+                            <div class="near-hint" id="near-hint">Кликните по карте, чтобы поставить точку.</div>
+                        </div>
+                    </div>
+                    <button id="filters-reset" class="link-btn">Сбросить фильтры</button>
                 </div>
-            </div>
-
-            <div class="sidebar-foot">
-                <div class="source-status">
-                    <span class="pulse-dot"></span>
-                    <div><strong>OpenStreetMap + ML</strong><span>Скоринг моделью, без ключей и прокси</span></div>
-                </div>
-                <a class="ghost-link" href="https://github.com/slvtveter/parser_for_companies" target="_blank" rel="noopener">
-                    <i class="fa-brands fa-github"></i> Исходный код проекта
-                </a>
             </div>
         </aside>
 
@@ -113,7 +103,7 @@
             <section class="stats">
                 <article class="stat" data-variant="total">
                     <div class="stat-ico"><i class="fa-solid fa-layer-group"></i></div>
-                    <div class="stat-body"><span class="stat-num" id="stat-total">0</span><span class="stat-label">Всего найдено</span></div>
+                    <div class="stat-body"><span class="stat-num" id="stat-total">0</span><span class="stat-label">Показано</span></div>
                 </article>
                 <article class="stat" data-variant="high">
                     <div class="stat-ico"><i class="fa-solid fa-fire"></i></div>
