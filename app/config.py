@@ -19,10 +19,10 @@ class Settings(BaseSettings):
     # --- Метаданные сервиса ---
     app_name: str = "LeadAnalytics"
     app_description: str = (
-        "Парсер локального бизнеса (OpenStreetMap) с оценкой аналитического "
-        "потенциала и генератором холодных писем."
+        "Поиск локального бизнеса (OpenStreetMap) с ML-оценкой аналитического "
+        "потенциала, фильтрами и обзором рынка."
     )
-    version: str = "1.0.0"
+    version: str = "2.0.0"
 
     # --- CORS ---
     cors_origins: list[str] = ["*"]
@@ -38,14 +38,6 @@ class Settings(BaseSettings):
 
     # Время жизни кэша результатов поиска (в секундах).
     cache_ttl: int = 600
-
-    # --- OpenRouter (генерация писем нейросетью) ---
-    openrouter_api_key: str | None = None
-    openrouter_base_url: str = "https://openrouter.ai/api/v1/chat/completions"
-    openrouter_default_model: str = "openai/gpt-oss-20b:free"
-    openrouter_app_url: str = "http://localhost:8000"
-    openrouter_app_title: str = "LeadAnalytics"
-    openrouter_timeout: int = 40
 
 
 @lru_cache

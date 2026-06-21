@@ -9,21 +9,17 @@ from fastapi import APIRouter, HTTPException, Response
 from app.config import get_settings
 from app.constants import CATEGORIES, CITIES
 from app.schemas import (
-    AIPitchRequest,
     Category,
     City,
     ExportRequest,
     HealthResponse,
-    PitchRequest,
-    PitchResponse,
     SearchRequest,
     SearchResponse,
 )
-from app.services.ai import AIPitchError, generate_ai_pitch
 from app.services.cache import TTLCache
 from app.services.export import build_export
 from app.services.osm import OverpassError, process_osm_data, query_osm_businesses
-from app.services.pitch import build_template_pitch
+from app.services.overview import build_overview
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +49,13 @@ def get_categories() -> list[dict]:
 
 @router.post("/search", response_model=SearchResponse)
 def search_leads(req: SearchRequest) -> SearchResponse:
-    """Ищет заведения через Overpass API и оценивает их потенциал."""
+    """Ищет заведения через Overpass API, считает ML-скоринг и обзор рынка."""
     cache_key = (req.city.strip().lower(), tuple(sorted(set(req.categories))))
     cached = _search_cache.get(cache_key)
     if cached is not None:
-        return SearchResponse(total=len(cached), leads=cached, cached=True)
+        return SearchResponse(
+            total=len(cached), leads=cached, overview=build_overview(cached), cached=True
+        )
 
     try:
         raw = query_osm_businesses(req.city, req.categories)
@@ -69,31 +67,9 @@ def search_leads(req: SearchRequest) -> SearchResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     _search_cache.set(cache_key, leads)
-    return SearchResponse(total=len(leads), leads=leads, cached=False)
-
-
-@router.post("/pitch", response_model=PitchResponse)
-def generate_pitch(req: PitchRequest) -> PitchResponse:
-    """Генерирует шаблонное письмо под тип бизнеса."""
-    pitch = build_template_pitch(req.business_name, req.category_key, req.pitch_type)
-    return PitchResponse(**pitch)
-
-
-@router.post("/pitch/ai", response_model=PitchResponse)
-def generate_pitch_ai(req: AIPitchRequest) -> PitchResponse:
-    """Генерирует персональное письмо нейросетью через OpenRouter."""
-    try:
-        pitch = generate_ai_pitch(
-            business_name=req.business_name,
-            category_label=req.category_label,
-            website=req.website,
-            phone=req.phone,
-            api_key=req.api_key,
-            model=req.model,
-        )
-    except AIPitchError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return PitchResponse(**pitch)
+    return SearchResponse(
+        total=len(leads), leads=leads, overview=build_overview(leads), cached=False
+    )
 
 
 @router.post("/export")

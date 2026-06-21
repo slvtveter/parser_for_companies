@@ -41,6 +41,9 @@ env/
 *.swp
 *.swo
 
+# ML model artifacts (re-trained on first run / via `python -m app.ml.train`)
+*.joblib
+
 # Environment variables / secrets
 .env
 .env.local

@@ -20,34 +20,41 @@ class TestBuildQuery:
 class TestProcessOsmData:
     def test_skips_elements_without_coords(self, sample_osm_payload):
         leads = process_osm_data(sample_osm_payload)
-        # Из 4 элементов один без координат — должно остаться 3.
-        assert len(leads) == 3
+        assert len(leads) == 3  # один объект без координат пропущен
         assert all(lead["lat"] is not None and lead["lon"] is not None for lead in leads)
 
-    def test_high_potential_independent_cafe(self, sample_osm_payload):
+    def test_leads_are_scored_and_enriched(self, sample_osm_payload):
         leads = process_osm_data(sample_osm_payload)
-        cafe = next(lead for lead in leads if lead["id"] == 1)
-        assert cafe["potential_score"] == "HIGH"
+        for lead in leads:
+            assert 0 <= lead["score"] <= 100
+            assert lead["potential_score"] in {"HIGH", "MEDIUM", "LOW"}
+            assert "factors" in lead and "competition" in lead and "location_count" in lead
+
+    def test_independent_cafe_outranks_empty_bakery(self, sample_osm_payload):
+        leads = {lead["id"]: lead for lead in process_osm_data(sample_osm_payload)}
+        cafe = leads[1]   # есть телефон, сайт, часы
+        bakery = leads[3]  # без контактов
+        assert cafe["score"] > bakery["score"]
         assert cafe["is_chain"] is False
         assert cafe["address"] == "Тверская улица, 10"
         assert cafe["category_key"] == "cafe"
-        assert cafe["opening_hours"] == "Mo-Su 08:00-22:00"
 
     def test_chain_detected_from_brand(self, sample_osm_payload):
-        leads = process_osm_data(sample_osm_payload)
-        chain = next(lead for lead in leads if lead["id"] == 2)
+        chain = {lead["id"]: lead for lead in process_osm_data(sample_osm_payload)}[2]
         assert chain["is_chain"] is True
         assert chain["potential_score"] == "LOW"
-        # Координаты взяты из center.
-        assert chain["lat"] == 55.76
+        assert chain["score"] <= 18
+        assert chain["lat"] == 55.76  # координаты взяты из center
 
     def test_bakery_without_contacts(self, sample_osm_payload):
-        leads = process_osm_data(sample_osm_payload)
-        bakery = next(lead for lead in leads if lead["id"] == 3)
+        bakery = {lead["id"]: lead for lead in process_osm_data(sample_osm_payload)}[3]
         assert bakery["category_label"] == "Пекарня"
-        assert bakery["potential_score"] == "LOW"
         assert bakery["phone"] is None
         assert bakery["address"].startswith("Адрес не указан")
+
+    def test_sorted_by_score_desc(self, sample_osm_payload):
+        scores = [lead["score"] for lead in process_osm_data(sample_osm_payload)]
+        assert scores == sorted(scores, reverse=True)
 
     def test_empty_payload(self):
         assert process_osm_data({}) == []

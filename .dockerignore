@@ -13,6 +13,7 @@ tests
 analysis
 *.ipynb
 *.csv
+*.joblib
 .env
 README.md
 Makefile

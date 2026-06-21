@@ -25,26 +25,6 @@ def test_categories(client):
     assert {"cafe", "bakery", "beauty"}.issubset(ids)
 
 
-def test_template_pitch_analytics(client):
-    res = client.post(
-        "/api/pitch",
-        json={"business_name": "Кофе Тест", "category_key": "cafe", "pitch_type": "analytics"},
-    )
-    assert res.status_code == 200
-    body = res.json()
-    assert "Кофе Тест" in body["subject"]
-    assert "iiko" in body["body"]
-
-
-def test_template_pitch_startup(client):
-    res = client.post(
-        "/api/pitch",
-        json={"business_name": "Стартап Тест", "category_key": "cafe", "pitch_type": "startup"},
-    )
-    assert res.status_code == 200
-    assert "FastAPI" in res.json()["body"]
-
-
 def test_export_csv(client):
     leads = [
         {
@@ -77,6 +57,8 @@ def test_search_with_mocked_overpass(client, sample_osm_payload, monkeypatch):
     assert data["status"] == "success"
     assert data["total"] == 3
     assert data["cached"] is False
+    assert data["overview"]["total"] == 3
+    assert "score" in data["leads"][0]
 
 
 def test_search_uses_cache_on_repeat(client, sample_osm_payload, monkeypatch):
