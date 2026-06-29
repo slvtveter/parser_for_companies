@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(__file__).resolve().parent / "model.joblib"
 RANDOM_SEED = 42
-DATASET_SIZE = 6000
+DATASET_SIZE = 2000
 
 _model = None  # ленивый синглтон обученного пайплайна
 _unavailable = False  # True, если sklearn не установлен

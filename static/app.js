@@ -113,7 +113,7 @@ async function loadCategories() {
         const box = $("#categories-list");
         box.innerHTML = "";
         cats.forEach((cat) => {
-            const on = true;
+            const on = cat.id === "cafe" || cat.id === "bakery";
             const b = document.createElement("button");
             b.className = "chip"; b.dataset.id = cat.id; b.setAttribute("aria-pressed", String(on));
             b.innerHTML = `<i class="fa-solid ${CATEGORY_ICONS[cat.id] || "fa-store"}"></i> ${cat.name}`;
@@ -183,7 +183,7 @@ function clearNear() {
 
 function resetFilters() {
     $("#score-min").value = 0; $("#score-val").textContent = "0";
-    ["f-independent", "f-phone", "f-website", "f-social", "f-email"].forEach((id) => ($("#" + id).checked = false));
+    ["f-independent", "f-phone", "f-website", "f-social", "f-email"].forEach((id) => ($("#" + id).checked = true));
     $("#table-search").value = "";
     state.chip = "all";
     document.querySelectorAll(".filter-chip").forEach((x) => x.classList.toggle("active", x.dataset.filter === "all"));
@@ -326,10 +326,13 @@ function bar(label, value, max, cls = "") {
 }
 
 function animateBars() {
+    // двойной rAF: первый — браузер рендерит width:0, второй — меняем на target и срабатывает CSS transition
     requestAnimationFrame(() => {
-        document.querySelectorAll(".bar-fill[data-w]").forEach((el) => {
-            el.style.width = el.dataset.w + "%";
-            el.removeAttribute("data-w");
+        requestAnimationFrame(() => {
+            document.querySelectorAll("[data-w]").forEach((el) => {
+                el.style.width = el.dataset.w + "%";
+                el.removeAttribute("data-w");
+            });
         });
     });
 }
@@ -507,7 +510,7 @@ function renderCardTab(lead) {
     const factorsHtml = lead.factors.map((f) => `
         <div class="factor ${f.positive ? "pos" : "neg"}">
             <span class="fl">${esc(f.label)}</span>
-            <span class="ftrack"><span class="ffill" style="width:${Math.max(6, Math.round(Math.abs(f.points) / maxAbs * 100))}%"></span></span>
+            <span class="ftrack"><span class="ffill" style="width:0" data-w="${Math.max(6, Math.round(Math.abs(f.points) / maxAbs * 100))}"></span></span>
             <span class="fp">${f.positive ? "+" : ""}${f.points}</span></div>`).join("");
     const lvl = lead.potential_score === "HIGH" ? "Сильный лид" : lead.potential_score === "MEDIUM" ? "Средний лид" : "Слабый лид";
 
@@ -532,6 +535,7 @@ function renderCardTab(lead) {
             <div class="block-title"><i class="fa-solid fa-handshake"></i> Как выйти на контакт</div>
             ${renderContacts(lead)}
         </div>`;
+    animateBars();
 }
 
 function renderWorkTab(lead) {
