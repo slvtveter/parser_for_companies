@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+import requests as _requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -17,8 +21,31 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
 # Каталог со статикой фронтенда (../static относительно этого файла).
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+_PING_URL = "https://lead-analytics.onrender.com/api/health"
+_PING_INTERVAL = 12 * 60  # 12 минут
+
+
+def _keep_alive() -> None:
+    time.sleep(60)  # ждём пока сервис полностью поднимется
+    while True:
+        try:
+            _requests.get(_PING_URL, timeout=10)
+            logger.info("keep-alive ping ok")
+        except Exception as exc:
+            logger.warning("keep-alive ping failed: %s", exc)
+        time.sleep(_PING_INTERVAL)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    t = threading.Thread(target=_keep_alive, daemon=True, name="keep-alive")
+    t.start()
+    yield
 
 
 def create_app() -> FastAPI:
@@ -29,6 +56,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         description=settings.app_description,
         version=settings.version,
+        lifespan=_lifespan,
     )
 
     app.add_middleware(
