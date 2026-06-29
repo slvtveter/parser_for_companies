@@ -326,13 +326,13 @@ function bar(label, value, max, cls = "") {
 }
 
 function animateBars() {
-    // двойной rAF: первый — браузер рендерит width:0, второй — меняем на target и срабатывает CSS transition
+    const els = [...document.querySelectorAll("[data-w]")];
+    // el.offsetWidth читает computed layout → браузер коммитит width:0 → transition сработает
+    els.forEach((el) => void el.offsetWidth);
     requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            document.querySelectorAll("[data-w]").forEach((el) => {
-                el.style.width = el.dataset.w + "%";
-                el.removeAttribute("data-w");
-            });
+        els.forEach((el) => {
+            el.style.width = el.dataset.w + "%";
+            el.removeAttribute("data-w");
         });
     });
 }
