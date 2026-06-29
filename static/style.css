@@ -754,12 +754,12 @@ th.sortable.desc::after { content: " ↓"; color: var(--brand); }
 /* Score hero (redesigned) */
 .score-hero { display: flex; align-items: center; gap: 18px; margin: 6px 0 18px; animation: pop 0.3s ease; }
 .ring {
-    width: 94px; height: 94px; border-radius: 50%; flex-shrink: 0;
+    width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0;
     display: grid; place-items: center; position: relative;
     background: conic-gradient(var(--c, var(--brand)) calc(var(--p, 0) * 1%), var(--surface-3) 0);
 }
-.ring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: var(--bg-1); }
-.ring-num { position: relative; font-family: 'Space Grotesk'; font-size: 31px; font-weight: 700; line-height: 1; }
+.ring::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--bg-1); }
+.ring-num { position: relative; font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; line-height: 1; }
 .ring-cap { position: relative; font-size: 9px; color: var(--text-3); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.08em; }
 .hero-side { flex: 1; min-width: 0; }
 .lvl-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px; border-radius: 999px; font-size: 13px; font-weight: 700; font-family: 'Space Grotesk'; }
@@ -797,5 +797,13 @@ th.sortable.desc::after { content: " ↓"; color: var(--brand); }
 }
 .fav-wide:hover { color: var(--warning); border-color: rgba(251,191,36,0.4); }
 .fav-wide.on { color: var(--warning); background: var(--warning-bg); border-color: rgba(251,191,36,0.45); }
+.notes-area {
+    width: 100%; background: var(--bg-1); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 11px 13px; color: var(--text);
+    font: inherit; font-size: 13px; line-height: 1.6; resize: vertical;
+    min-height: 90px; box-sizing: border-box; transition: var(--t);
+}
+.notes-area:focus { outline: none; border-color: var(--brand); box-shadow: var(--ring); }
+.notes-area::placeholder { color: var(--text-3); }
 
 .ov-empty { font-size: 12px; color: var(--text-3); padding: 6px 0; }

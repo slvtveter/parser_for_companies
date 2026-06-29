@@ -41,10 +41,19 @@ def _keep_alive() -> None:
         time.sleep(_PING_INTERVAL)
 
 
+def _warmup_ml() -> None:
+    try:
+        from app.ml.model import get_model
+        get_model()
+        logger.info("ML model warmed up")
+    except Exception as exc:
+        logger.warning("ML warmup failed: %s", exc)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    t = threading.Thread(target=_keep_alive, daemon=True, name="keep-alive")
-    t.start()
+    threading.Thread(target=_warmup_ml, daemon=True, name="ml-warmup").start()
+    threading.Thread(target=_keep_alive, daemon=True, name="keep-alive").start()
     yield
 
 

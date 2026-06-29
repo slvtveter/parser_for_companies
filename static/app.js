@@ -113,7 +113,7 @@ async function loadCategories() {
         const box = $("#categories-list");
         box.innerHTML = "";
         cats.forEach((cat) => {
-            const on = cat.id === "cafe" || cat.id === "bakery";
+            const on = true;
             const b = document.createElement("button");
             b.className = "chip"; b.dataset.id = cat.id; b.setAttribute("aria-pressed", String(on));
             b.innerHTML = `<i class="fa-solid ${CATEGORY_ICONS[cat.id] || "fa-store"}"></i> ${cat.name}`;
@@ -152,7 +152,7 @@ function setupListeners() {
 function setupFilters() {
     const reapply = () => applyFilters();
     $("#score-min").addEventListener("input", (e) => { $("#score-val").textContent = e.target.value; reapply(); });
-    ["f-independent", "f-phone", "f-website", "f-social", "f-email", "f-hours"].forEach((id) =>
+    ["f-independent", "f-phone", "f-website", "f-social", "f-email"].forEach((id) =>
         $("#" + id).addEventListener("change", reapply));
     $("#near-toggle").addEventListener("click", () => {
         state.near.active = !state.near.active;
@@ -183,7 +183,7 @@ function clearNear() {
 
 function resetFilters() {
     $("#score-min").value = 0; $("#score-val").textContent = "0";
-    ["f-independent", "f-phone", "f-website", "f-social", "f-email", "f-hours"].forEach((id) => ($("#" + id).checked = false));
+    ["f-independent", "f-phone", "f-website", "f-social", "f-email"].forEach((id) => ($("#" + id).checked = false));
     $("#table-search").value = "";
     state.chip = "all";
     document.querySelectorAll(".filter-chip").forEach((x) => x.classList.toggle("active", x.dataset.filter === "all"));
@@ -315,13 +315,23 @@ function renderOverview() {
                 ${districts}
             </div>
         </div>`;
+    animateBars();
 }
 
 function bar(label, value, max, cls = "") {
     const pct = Math.round((value / (max || 1)) * 100);
     return `<div class="bar-row"><span class="bl">${esc(label)}</span>
-        <span class="bar-track"><span class="bar-fill ${cls}" style="width:${pct}%"></span></span>
+        <span class="bar-track"><span class="bar-fill ${cls}" style="width:0" data-w="${pct}"></span></span>
         <span class="bv">${value}</span></div>`;
+}
+
+function animateBars() {
+    requestAnimationFrame(() => {
+        document.querySelectorAll(".bar-fill[data-w]").forEach((el) => {
+            el.style.width = el.dataset.w + "%";
+            el.removeAttribute("data-w");
+        });
+    });
 }
 
 // ---------------- Filters + sort ----------------
@@ -337,7 +347,7 @@ function applyFilters() {
     const need = {
         independent: $("#f-independent").checked, phone: $("#f-phone").checked,
         website: $("#f-website").checked, social: $("#f-social").checked,
-        email: $("#f-email").checked, hours: $("#f-hours").checked,
+        email: $("#f-email").checked,
     };
 
     state.filtered = state.all.filter((l) => {
@@ -348,7 +358,6 @@ function applyFilters() {
         if (need.website && !l.website) return false;
         if (need.social && !l.social) return false;
         if (need.email && !l.email) return false;
-        if (need.hours && !l.opening_hours) return false;
         if (state.chip === "HIGH" && l.potential_score !== "HIGH") return false;
         if (state.chip === "fav" && !crm(l.id).fav) return false;
         if (state.chip === "working" && crm(l.id).status !== "working") return false;
@@ -536,7 +545,7 @@ function renderWorkTab(lead) {
             </div>
             <button class="fav-wide ${c.fav ? "on" : ""}" id="fav-btn"><i class="fa-${c.fav ? "solid" : "regular"} fa-star"></i> ${c.fav ? "В избранном" : "Добавить в избранное"}</button>
             <div class="block-title"><i class="fa-solid fa-pen"></i> Заметки</div>
-            <textarea id="crm-notes" placeholder="Что узнал, когда написать, договорённости…">${esc(c.notes)}</textarea>
+            <textarea id="crm-notes" class="notes-area" placeholder="Что узнал, когда написать, договорённости…">${esc(c.notes)}</textarea>
         </div>`;
 
     $("#status-list").querySelectorAll(".status-opt").forEach((b) =>
